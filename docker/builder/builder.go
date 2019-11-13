@@ -49,6 +49,22 @@ type DaemonBuilder struct {
 	LoggerFactory    logger.Factory
 }
 
+// lastProgressOutput is the same as progress.Output except
+// that it only output with the last update. It is used in
+// non terminal scenarios to suppress verbose messages
+type lastProgressOutput struct {
+	output progress.Output
+}
+
+// WriteProgress formats progress information from a ProgressReader.
+func (out *lastProgressOutput) WriteProgress(prog progress.Progress) error {
+	if !prog.LastUpdate {
+		return nil
+	}
+
+	return out.output.WriteProgress(prog)
+}
+
 // Build implements Builder. It consumes the docker build API endpoint and sends
 // a tar of the specified service build context.
 func (d *DaemonBuilder) Build(ctx context.Context, imageName string) error {
@@ -78,18 +94,21 @@ func (d *DaemonBuilder) Build(ctx context.Context, imageName string) error {
 		Logger: l,
 	}
 
-	// Setup an upload progress bar
-	progressOutput := streamformatter.NewProgressOutput(progBuff)
-
-	var body io.Reader = progress.NewProgressReader(buildCtx, progressOutput, 0, "", "Sending build context to Docker daemon")
-
-	logrus.Infof("Building %s...", imageName)
-
 	outFd, isTerminalOut := term.GetFdInfo(os.Stdout)
 	w := l.OutWriter()
 	if w != nil {
 		outFd, isTerminalOut = term.GetFdInfo(w)
 	}
+
+	// Setup an upload progress bar
+	progressOutput := streamformatter.NewProgressOutput(progBuff)
+	if !isTerminalOut {
+		progressOutput = &lastProgressOutput{output: progressOutput}
+	}
+
+	var body io.Reader = progress.NewProgressReader(buildCtx, progressOutput, 0, "", "Sending build context to Docker daemon")
+
+	logrus.Infof("Building %s...", imageName)
 
 	// Convert map[string]*string to map[string]string
 	labels := make(map[string]string)
