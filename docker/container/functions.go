@@ -2,6 +2,7 @@ package container
 
 import (
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"golang.org/x/net/context"
@@ -21,7 +22,7 @@ func ListByFilter(ctx context.Context, clientInstance client.ContainerAPIClient,
 		}
 	}
 
-	return clientInstance.ContainerList(ctx, types.ContainerListOptions{
+	return clientInstance.ContainerList(ctx, container.ListOptions{
 		All:     true,
 		Filters: filterArgs,
 	})

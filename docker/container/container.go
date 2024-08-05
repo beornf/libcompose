@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -16,12 +15,13 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/docker/docker/pkg/term"
 	"github.com/docker/go-connections/nat"
 	"github.com/docker/libcompose/config"
 	"github.com/docker/libcompose/labels"
 	"github.com/docker/libcompose/logger"
 	"github.com/docker/libcompose/project"
+	"github.com/moby/term"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,8 +33,8 @@ type Container struct {
 }
 
 // Create creates a container and return a Container struct (and an error if any)
-func Create(ctx context.Context, client client.ContainerAPIClient, name string, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig) (*Container, error) {
-	container, err := client.ContainerCreate(ctx, config, hostConfig, networkingConfig, nil, name)
+func Create(ctx context.Context, client client.ContainerAPIClient, name string, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, platform *ocispec.Platform) (*Container, error) {
+	container, err := client.ContainerCreate(ctx, config, hostConfig, networkingConfig, platform, name)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (c *Container) Rename(ctx context.Context, newName string) error {
 
 // Remove removes the container.
 func (c *Container) Remove(ctx context.Context, removeVolume bool) error {
-	return c.client.ContainerRemove(ctx, c.container.ID, types.ContainerRemoveOptions{
+	return c.client.ContainerRemove(ctx, c.container.ID, container.RemoveOptions{
 		Force:         true,
 		RemoveVolumes: removeVolume,
 	})
@@ -126,8 +126,7 @@ func (c *Container) Remove(ctx context.Context, removeVolume bool) error {
 
 // Stop stops the container.
 func (c *Container) Stop(ctx context.Context, timeout int) error {
-	timeoutDuration := time.Duration(timeout) * time.Second
-	return c.client.ContainerStop(ctx, c.container.ID, &timeoutDuration)
+	return c.client.ContainerStop(ctx, c.container.ID, container.StopOptions{Timeout: &timeout})
 }
 
 // Pause pauses the container. If the containers are already paused, don't fail.
@@ -190,7 +189,7 @@ func (c *Container) Run(ctx context.Context, configOverride *config.ServiceConfi
 		stderr = os.Stderr
 	}
 
-	options := types.ContainerAttachOptions{
+	options := container.AttachOptions{
 		Stream: true,
 		Stdin:  configOverride.StdinOpen,
 		Stdout: configOverride.Tty,
@@ -219,7 +218,7 @@ func (c *Container) Run(ctx context.Context, configOverride *config.ServiceConfi
 		errCh <- holdHijackedConnection(configOverride.Tty, in, out, stderr, resp)
 	}()
 
-	if err := c.client.ContainerStart(ctx, c.container.ID, types.ContainerStartOptions{}); err != nil {
+	if err := c.client.ContainerStart(ctx, c.container.ID, container.StartOptions{}); err != nil {
 		return -1, err
 	}
 
@@ -229,7 +228,7 @@ func (c *Container) Run(ctx context.Context, configOverride *config.ServiceConfi
 			return -1, err
 		}
 
-		resizeOpts := types.ResizeOptions{
+		resizeOpts := container.ResizeOptions{
 			Height: uint(ws.Height),
 			Width:  uint(ws.Width),
 		}
@@ -302,7 +301,7 @@ func holdHijackedConnection(tty bool, inputStream io.ReadCloser, outputStream, e
 // Start the specified container with the specified host config
 func (c *Container) Start(ctx context.Context) error {
 	logrus.WithFields(logrus.Fields{"container.ID": c.container.ID, "container.Name": c.container.Name}).Debug("Starting container")
-	if err := c.client.ContainerStart(ctx, c.container.ID, types.ContainerStartOptions{}); err != nil {
+	if err := c.client.ContainerStart(ctx, c.container.ID, container.StartOptions{}); err != nil {
 		logrus.WithFields(logrus.Fields{"container.ID": c.container.ID, "container.Name": c.container.Name}).Debug("Failed to start container")
 		return err
 	}
@@ -311,8 +310,7 @@ func (c *Container) Start(ctx context.Context) error {
 
 // Restart restarts the container if existing, does nothing otherwise.
 func (c *Container) Restart(ctx context.Context, timeout int) error {
-	timeoutDuration := time.Duration(timeout) * time.Second
-	return c.client.ContainerRestart(ctx, c.container.ID, &timeoutDuration)
+	return c.client.ContainerRestart(ctx, c.container.ID, container.StopOptions{Timeout: &timeout})
 }
 
 // Log forwards container logs to the project configured logger.
@@ -322,7 +320,7 @@ func (c *Container) Log(ctx context.Context, l logger.Logger, follow bool) error
 		return err
 	}
 
-	options := types.ContainerLogsOptions{
+	options := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,

@@ -11,9 +11,9 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
-	"github.com/docker/docker/pkg/term"
 	"github.com/docker/docker/registry"
 	"github.com/docker/libcompose/docker/auth"
+	"github.com/moby/term"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )

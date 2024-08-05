@@ -9,7 +9,7 @@ import (
 
 	"reflect"
 
-	"github.com/docker/docker/pkg/urlutil"
+	"github.com/docker/docker/builder/remotecontext/urlutil"
 	"github.com/docker/libcompose/utils"
 	composeYaml "github.com/docker/libcompose/yaml"
 	"github.com/sirupsen/logrus"

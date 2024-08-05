@@ -10,15 +10,16 @@ import (
 
 	"github.com/docker/cli/cli/command/image/build"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/builder/dockerignore"
+	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
-	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/progress"
 	"github.com/docker/docker/pkg/streamformatter"
-	"github.com/docker/docker/pkg/term"
 	"github.com/docker/libcompose/logger"
+	"github.com/moby/patternmatcher"
+	"github.com/moby/patternmatcher/ignorefile"
+	"github.com/moby/term"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
@@ -37,7 +38,7 @@ type DaemonBuilder struct {
 	Client           client.ImageAPIClient
 	ContextDirectory string
 	Dockerfile       string
-	AuthConfigs      map[string]types.AuthConfig
+	AuthConfigs      map[string]registry.AuthConfig
 	NoCache          bool
 	ForceRemove      bool
 	Pull             bool
@@ -205,7 +206,7 @@ func CreateTar(contextDirectory, dockerfile string) (io.ReadCloser, error) {
 		logrus.Warnf("Error while reading .dockerignore (%s) : %s", dockerIgnorePath, err.Error())
 		excludes = make([]string, 0)
 	} else {
-		excludes, err = dockerignore.ReadAll(dockerIgnore)
+		excludes, err = ignorefile.ReadAll(dockerIgnore)
 		if err != nil {
 			return nil, err
 		}
@@ -217,8 +218,8 @@ func CreateTar(contextDirectory, dockerfile string) (io.ReadCloser, error) {
 	// .dockerignore is needed to know if either one needs to be
 	// removed.  The deamon will remove them for us, if needed, after it
 	// parses the Dockerfile.
-	keepThem1, _ := fileutils.Matches(".dockerignore", excludes)
-	keepThem2, _ := fileutils.Matches(dockerfileName, excludes)
+	keepThem1, _ := patternmatcher.Matches(".dockerignore", excludes)
+	keepThem2, _ := patternmatcher.Matches(dockerfileName, excludes)
 	if keepThem1 || keepThem2 {
 		includes = append(includes, ".dockerignore", dockerfileName)
 	}
